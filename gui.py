@@ -28,6 +28,13 @@ class TaskModel(object):
     def GetChildrenCount(self, indices):
         return len( self.GetItem( indices )['kids'] )
 
+    def GetItemId(self, indices):
+        task = self.GetItem( indices )
+        return task['taskid']
+
+    def Move(self, source, dest):
+        self._taskbook.move( source, dest )
+
 #--------------------------------------------------------------
 class TaskTree(treemixin.VirtualTree, treemixin.DragAndDrop,
             treemixin.ExpansionState, wx.TreeCtrl):
@@ -68,7 +75,10 @@ class TaskTree(treemixin.VirtualTree, treemixin.DragAndDrop,
         return self.model.GetChildrenCount( indices )
 
     def OnDrop(self, target, item):
-        print "OnDrop target=", target, " item=", item
+        itemId   = self.model.GetItemId( self.GetIndexOfItem( item ) )
+        targetId = self.model.GetItemId( self.GetIndexOfItem( target ) )
+        self.model.Move( itemId, targetId )
+        self.GetParent().RefreshItems()
 
 #--------------------------------------------------------------
 class TaskOverviewPanel(wx.Panel):
