@@ -4,179 +4,182 @@ import sys, os.path, logging, sqlite3
 
 #--------------------------------------------------------------------------
 class Database(object):
-	def __init__( self, filename="/home/jasmith/.taskbook.db" ):
-		self._filename = filename
-		self._connection = sqlite3.connect( self._filename )
-		self.init()
+    def __init__( self, filename="/home/jasmith/.taskbook.db" ):
+        self._filename = filename
+        self._connection = sqlite3.connect( self._filename )
+        self.init()
 
-	def init( self ):
-		columns = [ "taskid INTEGER PRIMARY KEY AUTOINCREMENT",
-			"name TEXT",
-			"description TEXT",
-			"parent INTEGER"
-		]
-		try:
-			with self._connection:
-				self._connection.execute( "CREATE TABLE IF NOT EXISTS Tasks ( %s )" % (','.join(columns)) )
-		except sqlite3.Error as e:
-			logging.error( "Failed to initialize Task table: %s", str( e.args[0] ) )
+    def init( self ):
+        columns = [ "taskid INTEGER PRIMARY KEY AUTOINCREMENT",
+            "name TEXT",
+            "description TEXT",
+            "parent INTEGER"
+        ]
+        try:
+            with self._connection:
+                self._connection.execute( "CREATE TABLE IF NOT EXISTS Tasks ( %s )" % (','.join(columns)) )
+        except sqlite3.Error as e:
+            logging.error( "Failed to initialize Task table: %s", str( e.args[0] ) )
 
-	def select( self, columns=["taskid","name","description","parent"] ):
-		try:
-			cursor = self._connection.cursor()
-			cursor.execute( "SELECT %s FROM Tasks" % (','.join( columns )) )
-			return [ dict( zip( columns, row ) ) for row in cursor ]
-		except sqlite3.Error as e:
-			logging.error( "Error getting tasks: columns=%s error=%s", str(columns), str(e.args[0]) )
-			return None
+    def select( self, columns=["taskid","name","description","parent"] ):
+        try:
+            cursor = self._connection.cursor()
+            cursor.execute( "SELECT %s FROM Tasks" % (','.join( columns )) )
+            return [ dict( zip( columns, row ) ) for row in cursor ]
+        except sqlite3.Error as e:
+            logging.error( "Error getting tasks: columns=%s error=%s", str(columns), str(e.args[0]) )
+            return None
 
-	def insert( self, name, description="" ):
-		try:
-			with self._connection:
-				cursor = self._connection.cursor()
-				cursor.execute( "INSERT INTO Tasks ( name, description ) VALUES ( ?, ? )", ( name, description ) )
-			return cursor.lastrowid
-		except sqlite3.Error as e:
-			logging.error( "Failed to insert new task: %s", str( e.args[0] ) )
-			return None
+    def insert( self, name, description="" ):
+        try:
+            with self._connection:
+                cursor = self._connection.cursor()
+                cursor.execute( "INSERT INTO Tasks ( name, description ) VALUES ( ?, ? )", ( name, description ) )
+            return cursor.lastrowid
+        except sqlite3.Error as e:
+            logging.error( "Failed to insert new task: %s", str( e.args[0] ) )
+            return None
 
-	def delete( self, ids ):
-		try:
-			with self._connection:
-				cursor = self._connection.cursor()
-				cursor.executemany( "DELETE FROM Tasks WHERE taskid=?", [ (id,) for id in ids ] )
-			return True
-		except sqlite3.Error as e:
-			logging.error( "Failed to delete tasks: ids=%s error=%s", str(ids), str(e.args[0]) )
-			return False
+    def delete( self, ids ):
+        try:
+            with self._connection:
+                cursor = self._connection.cursor()
+                cursor.executemany( "DELETE FROM Tasks WHERE taskid=?", [ (id,) for id in ids ] )
+            return True
+        except sqlite3.Error as e:
+            logging.error( "Failed to delete tasks: ids=%s error=%s", str(ids), str(e.args[0]) )
+            return False
 
-	def set_parent( self, taskid, parent ):
-		try:
-			with self._connection:
-				cursor = self._connection.cursor()
-				cursor.execute( "UPDATE Tasks SET parent=? WHERE taskid=?", (parent, taskid) )
-			return True
-		except sqlite3.Error as e:
-			logging.error( "Failed to set task[%u] as parent to task[%u]", parent, taskid )
-			return False
+    def set_parent( self, taskid, parent ):
+        try:
+            with self._connection:
+                cursor = self._connection.cursor()
+                cursor.execute( "UPDATE Tasks SET parent=? WHERE taskid=?", (parent, taskid) )
+            return True
+        except sqlite3.Error as e:
+            logging.error( "Failed to set task[%u] as parent to task[%u]", parent, taskid )
+            return False
 
 #--------------------------------------------------------------------------
 class Notebook(object):
-	def __init__( self ):
-		self._database = Database()
-		self._tasks = dict() # { taskid: task }
+    def __init__( self ):
+        self._database = Database()
+        self._tasks = dict() # { taskid: task }
 
-	def refresh( self ):
-		self._tasks = dict()
+    def refresh( self ):
+        self._tasks = dict()
 
-		raw = self._database.select()
-		for task in raw:
-			task['kids'] = []
-			self._tasks[ task['taskid'] ] = task
+        raw = self._database.select()
+        for task in raw:
+            task['kids'] = []
+            self._tasks[ task['taskid'] ] = task
 
-		for task in raw:
-			if task['parent']:
-				self._tasks[ task['parent'] ]['kids'].append( task['taskid'] )
+        for task in raw:
+            if task['parent']:
+                self._tasks[ task['parent'] ]['kids'].append( task['taskid'] )
 
-	def add( self, name, description="" ):
-		return self._database.insert( name=name, description=description )
+    def add( self, name, description="" ):
+        return self._database.insert( name=name, description=description )
 
-	def _list( self, task, indent=0 ):
-		print "%4i : %s%s" % ( task['taskid'], '  '*indent, task['name'])
-		for kid in task['kids']:
-			self._list( self._tasks[ kid ], indent+1 )
+    def _list( self, task, indent=0 ):
+        print "%4i : %s%s" % ( task['taskid'], '  '*indent, task['name'])
+        for kid in task['kids']:
+            self._list( self._tasks[ kid ], indent+1 )
 
-	def list( self ):
-		self.refresh()
-		for task in [ t for t in self._tasks.values() if not t['parent'] ]:
-			self._list( task )
+    def list( self ):
+        self.refresh()
+        for task in [ t for t in self._tasks.values() if not t['parent'] ]:
+            self._list( task )
 
-	def _kids( self, taskid ):
-		kids = self._tasks[taskid]['kids']
-		for kid in kids:
-			kids.extend( self._kids( kid ) )
-		return kids
+    def _kids( self, taskid ):
+        kids = self._tasks[taskid]['kids']
+        for kid in kids:
+            kids.extend( self._kids( kid ) )
+        return kids
 
-	def delete( self, taskid ):
-		self.refresh()
-		ids = [ taskid ]
-		ids.extend( self._kids( taskid ) )
-		return self._database.delete( ids )
+    def delete( self, taskid ):
+        self.refresh()
+        ids = [ taskid ]
+        ids.extend( self._kids( taskid ) )
+        return self._database.delete( ids )
 
-	def move( self, taskid, parent ):
-		self.refresh()
-		return self._database.set_parent( taskid, parent )
+    def move( self, taskid, parent ):
+        self.refresh()
+        return self._database.set_parent( taskid, parent )
+
+    def select( self, parentid=None ):
+        return [ task for task in self._tasks if self._tasks['parent'] == parentid ]
 
 #--------------------------------------------------------------------------
 def do_list( book, args ):
-	book = Notebook()
-	book.list()
-	return 0
+    book = Notebook()
+    book.list()
+    return 0
 
 #--------------------------------------------------------------------------
 def do_add( book, args ):
-	name = ' '.join( args )
-	if len(name) == 0:
-		usage( "Missing task name!" )
-		return 1
+    name = ' '.join( args )
+    if len(name) == 0:
+        usage( "Missing task name!" )
+        return 1
 
-	if not book.add( name=name ):
-		return 1
-	book.list()
-	return 0
+    if not book.add( name=name ):
+        return 1
+    book.list()
+    return 0
 
 #--------------------------------------------------------------------------
 def do_delete( book, args ):
-	for x in args:
-		book.delete( int(x) )
-	book.list()
-	return 0
+    for x in args:
+        book.delete( int(x) )
+    book.list()
+    return 0
 
 #--------------------------------------------------------------------------
 def do_move( book, args ):
-	if len(args) < 2:
-		usage( "Missing move arguments" )
-		return 1
+    if len(args) < 2:
+        usage( "Missing move arguments" )
+        return 1
 
-	dest = int( args[-1] )
-	for source in args[:-1]:
-		if not book.move( int(source), dest ):
-			return 1
-	book.list()
-	return 0
+    dest = int( args[-1] )
+    for source in args[:-1]:
+        if not book.move( int(source), dest ):
+            return 1
+    book.list()
+    return 0
 
 #--------------------------------------------------------------------------
 COMMANDS = {
-	'list'    : do_list,
-	'add'     : do_add,
-	'del'     : do_delete,
-	'delete'  : do_delete,
-	'move'    : do_move,
-	'mv'      : do_move
+    'list'    : do_list,
+    'add'     : do_add,
+    'del'     : do_delete,
+    'delete'  : do_delete,
+    'move'    : do_move,
+    'mv'      : do_move
 }
 
 #--------------------------------------------------------------------------
 def usage( err=None ):
-	if err:
-		print "ERROR: ", err
-	print "usage: TODO"
+    if err:
+        print "ERROR: ", err
+    print "usage: TODO"
 
 #--------------------------------------------------------------------------
 def main( args ):
-	if len(args) > 0:
-		command = args[0]
-		args = args[1:]
-	else:
-		command = "list"
+    if len(args) > 0:
+        command = args[0]
+        args = args[1:]
+    else:
+        command = "list"
 
-	func = COMMANDS.get( command, None )
-	if not func:
-		usage( "Unknown command '%s'" % command )
-		return 1
+    func = COMMANDS.get( command, None )
+    if not func:
+        usage( "Unknown command '%s'" % command )
+        return 1
 
-	return func( Notebook(), args )
+    return func( Notebook(), args )
 
 #--------------------------------------------------------------------------
 if __name__ == "__main__":
-	sys.exit( main( sys.argv[1:] ) )
+    sys.exit( main( sys.argv[1:] ) )
 
