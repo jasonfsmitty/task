@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import task
 import wx
 
 try:
@@ -9,11 +10,32 @@ except ImportError:
     from wx.lib.mixins import treemixin
 
 #--------------------------------------------------------------
-class TaskTreeMixin(treemixin.VirtualTree, treemixin.DragAndDrop,
-            treemixin.ExpansionState):
+class TaskModel(object):
+    def __init__(self, taskbook):
+        self._taskbook = taskbook
+
+    def GetItem(self, indices):
+        tasks = self._taskbook.select()
+        task = { 'name': 'Hidden root', 'kids': tasks, 'taskid': 0, 'parent': None }
+        for i in indices:
+            task = tasks[i]
+            tasks =self._taskbook.select( parentid=task['taskid'] )
+        return task
+
+    def GetText(self, indices):
+        return self.GetItem( indices )['name']
+
+    def GetChildrenCount(self, indices):
+        return len( self.GetItem( indices )['kids'] )
+
+#--------------------------------------------------------------
+class TaskTree(treemixin.VirtualTree, treemixin.DragAndDrop,
+            treemixin.ExpansionState, wx.TreeCtrl):
 
     def __init__( self, *args, **kwargs ):
-        super(TaskTreeMixin, self).__init__( *args, **kwargs )
+        self.taskbook = kwargs.pop("taskbook")
+        super(TaskTree, self).__init__( *args, **kwargs )
+        self.model = TaskModel( self.taskbook )
         self.RefreshItems()
         self.CreateImageList()
 
@@ -25,49 +47,43 @@ class TaskTreeMixin(treemixin.VirtualTree, treemixin.DragAndDrop,
         self.AssignImageList( self.imageList )
 
     def OnGetItemFont(self, indices):
-        if len(indices) < 4:
+        if self.model.GetChildrenCount(indices) > 0:
             return wx.SMALL_FONT
         else:
-            return super(TaskTreeMixin,self).OnGetItemFont(indices)
+            return super(TaskTree,self).OnGetItemFont(indices)
 
     def OnGetItemImage(self, indices, which):
         if which in [wx.TreeItemIcon_Normal, wx.TreeItemIcon_Selected]:
-            if len(indices) < 4:
+            if self.model.GetChildrenCount(indices) > 0:
                 return 0
             else:
                 return 2
         else:
             return 1
 
-    def OnGetItemText(self, indices):
-        text="blah " + str(indices)
-        print "OnGetItemText[", indices, "]=", text
-        return text
+    def OnGetItemText( self, indices ):
+        return self.model.GetText( indices )
 
     def OnGetChildrenCount(self, indices):
-        count = 4 - len(indices)
-        print "GetChidrenCount[", indices, "]=", count
-        return count
+        return self.model.GetChildrenCount( indices )
 
     def OnDrop(self, target, item):
         print "OnDrop target=", target, " item=", item
 
 #--------------------------------------------------------------
-class TaskTree(TaskTreeMixin, wx.TreeCtrl):
-    pass
-
-#--------------------------------------------------------------
 class TaskOverviewPanel(wx.Panel):
     def __init__(self, *args, **kwds):
+        self.taskbook = kwds.pop('taskbook')
         wx.Panel.__init__( self, *args, **kwds )
+
         self.newTaskText = wx.TextCtrl(self, -1, "", style=wx.TE_PROCESS_ENTER)
         self.newTaskText.Bind( wx.EVT_TEXT_ENTER, self.OnTaskEnter )
 
-        self.taskTree = TaskTree(self)
+        self.taskTree = TaskTree(self, taskbook=self.taskbook)
 
         sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer.Add(self.taskTree, 1, wx.EXPAND, 0)
         sizer.Add(self.newTaskText, 0, wx.EXPAND, 0)
+        sizer.Add(self.taskTree, 1, wx.EXPAND, 0)
         self.SetSizer(sizer)
 
         self.newTaskText.SetFocus()
@@ -78,11 +94,12 @@ class TaskOverviewPanel(wx.Panel):
     def OnTaskEnter(self, event):
         text = self.newTaskText.GetValue().strip()
         if len(text):
-            print "Add Task: %s" % (text)
+            self.taskbook.add( text )
         self.newTaskText.Clear()
         self.RefreshItems()
 
     def RefreshItems(self):
+        self.taskbook.refresh()
         self.taskTree.RefreshItems()
         self.taskTree.UnselectAll()
 
@@ -96,10 +113,11 @@ class MessagePanel(wx.Panel):
 class MyFrame2(wx.Frame):
     def __init__(self, *args, **kwds):
         kwds["style"] = wx.DEFAULT_FRAME_STYLE
+        self.taskbook = kwds.pop('taskbook')
         wx.Frame.__init__(self, *args, **kwds)
         self.notebook = wx.Notebook(self, -1, style=0)
 
-        self.notebook_pane_1 = TaskOverviewPanel(self.notebook, -1)
+        self.notebook_pane_1 = TaskOverviewPanel(self.notebook, -1, taskbook=self.taskbook)
         self.notebook_pane_2 = MessagePanel(self.notebook, -1)
 
         self.SetTitle("Tasks")
@@ -120,7 +138,9 @@ class MyFrame2(wx.Frame):
 if __name__ == "__main__":
     app = wx.PySimpleApp(0)
     wx.InitAllImageHandlers()
-    frame = MyFrame2(None,-1,"")
+    taskbook = task.Notebook()
+    taskbook.refresh()
+    frame = MyFrame2(None,-1,"",taskbook=taskbook)
     app.SetTopWindow(frame)
     frame.Show()
     app.MainLoop()
