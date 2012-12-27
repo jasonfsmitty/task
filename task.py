@@ -88,7 +88,7 @@ class Notebook(object):
 
     def list( self ):
         self.refresh()
-        for task in [ t for t in self._tasks.values() if not t['parent'] ]:
+        for task in self.select():
             self._list( task )
 
     def _kids( self, taskid ):
@@ -108,7 +108,7 @@ class Notebook(object):
         return self._database.set_parent( taskid, parent )
 
     def select( self, parentid=None ):
-        return [ task for task in self._tasks if self._tasks['parent'] == parentid ]
+        return [ task for task in self._tasks.itervalues() if task['parent'] == parentid ]
 
 #--------------------------------------------------------------------------
 def do_list( book, args ):
