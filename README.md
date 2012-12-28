@@ -9,3 +9,4 @@ TODO:
  - Log messages
  - Task states: Active, Hold, Complete
  - UI: task bar icon and quick add task/log
+ - Windows support
