@@ -39,6 +39,16 @@ class TaskTable(object):
             logging.error( "Failed to insert new task: %s", str( e.args[0] ) )
             return None
 
+    def update( self, taskid, name ):
+        try:
+            with self._database.connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute( "UPDATE Tasks SET name=? WHERE taskid=?", (name, taskid) )
+            return True
+        except sqlite3.Error as e:
+            logging.error( "Failed to update task: %s", str( e.args[0] ) )
+            return False
+
     def delete( self, ids ):
         try:
             with self._database.connection() as conn:
@@ -124,6 +134,9 @@ class Notebook(object):
         ids.extend( self._kids( taskid ) )
         return self._database.tasks.delete( ids )
 
+    def update( self, taskid, name ):
+        return self._database.tasks.update( taskid, name )
+
     def move( self, taskid, parent ):
         self.refresh()
         return self._database.tasks.set_parent( taskid, parent )
@@ -170,13 +183,25 @@ def do_move( book, args ):
     return 0
 
 #--------------------------------------------------------------------------
+def do_edit( book, args ):
+    if len(args) < 2:
+        usage( "Missing edit arguments" )
+        return 1
+
+    if not book.update( int(args[0]), ' '.join( args[1:] ) ):
+        return 1
+
+    book.list()
+    return 0    
+#--------------------------------------------------------------------------
 COMMANDS = {
     'list'    : do_list,
     'add'     : do_add,
     'del'     : do_delete,
     'delete'  : do_delete,
     'move'    : do_move,
-    'mv'      : do_move
+    'mv'      : do_move,
+    'edit'    : do_edit
 }
 
 #--------------------------------------------------------------------------
