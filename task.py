@@ -3,27 +3,26 @@
 import sys, os.path, logging, sqlite3
 
 #--------------------------------------------------------------------------
-class Database(object):
-    def __init__( self, filename="/home/jasmith/.taskbook.db" ):
-        self._filename = filename
-        self._connection = sqlite3.connect( self._filename )
-        self.init()
+class TaskTable(object):
+    def __init__( self, db ):
+        self._database = db
 
-    def init( self ):
-        columns = [ "taskid INTEGER PRIMARY KEY AUTOINCREMENT",
+    def create( self ):
+        columns = [
+            "taskid INTEGER PRIMARY KEY AUTOINCREMENT",
             "name TEXT",
             "description TEXT",
             "parent INTEGER"
         ]
         try:
-            with self._connection:
-                self._connection.execute( "CREATE TABLE IF NOT EXISTS Tasks ( %s )" % (','.join(columns)) )
+            with self._database.connection() as conn:
+                conn.execute( "CREATE TABLE IF NOT EXISTS Tasks ( %s )" % (','.join(columns)) )
         except sqlite3.Error as e:
             logging.error( "Failed to initialize Task table: %s", str( e.args[0] ) )
 
     def select( self, columns=["taskid","name","description","parent"] ):
         try:
-            cursor = self._connection.cursor()
+            cursor = self._database.cursor()
             cursor.execute( "SELECT %s FROM Tasks" % (','.join( columns )) )
             return [ dict( zip( columns, row ) ) for row in cursor ]
         except sqlite3.Error as e:
@@ -32,8 +31,8 @@ class Database(object):
 
     def insert( self, name, description="" ):
         try:
-            with self._connection:
-                cursor = self._connection.cursor()
+            with self._database.connection() as conn:
+                cursor = conn.cursor()
                 cursor.execute( "INSERT INTO Tasks ( name, description ) VALUES ( ?, ? )", ( name, description ) )
             return cursor.lastrowid
         except sqlite3.Error as e:
@@ -42,8 +41,8 @@ class Database(object):
 
     def delete( self, ids ):
         try:
-            with self._connection:
-                cursor = self._connection.cursor()
+            with self._database.connection() as conn:
+                cursor = conn.cursor()
                 cursor.executemany( "DELETE FROM Tasks WHERE taskid=?", [ (id,) for id in ids ] )
             return True
         except sqlite3.Error as e:
@@ -52,13 +51,35 @@ class Database(object):
 
     def set_parent( self, taskid, parent ):
         try:
-            with self._connection:
-                cursor = self._connection.cursor()
+            with self._database.connection() as conn:
+                cursor = conn.cursor()
                 cursor.execute( "UPDATE Tasks SET parent=? WHERE taskid=?", (parent, taskid) )
             return True
         except sqlite3.Error as e:
             logging.error( "Failed to set task[%u] as parent to task[%u]", parent, taskid )
             return False
+
+#--------------------------------------------------------------------------
+class Database(object):
+    def __init__( self, filename="/home/jasmith/.taskbook.db" ):
+        self._filename = filename
+        self._connection = sqlite3.connect( self._filename )
+
+        self._tasks = TaskTable( self )
+        self.init()
+
+    def init( self ):
+        self._tasks.create()
+
+    def connection( self ):
+        return self._connection
+
+    def cursor( self ):
+        return self._connection.cursor()
+
+    @property
+    def tasks( self ):
+        return self._tasks
 
 #--------------------------------------------------------------------------
 class Notebook(object):
@@ -69,7 +90,7 @@ class Notebook(object):
     def refresh( self ):
         self._tasks = dict()
 
-        raw = self._database.select()
+        raw = self._database.tasks.select()
         for task in raw:
             task['kids'] = []
             self._tasks[ task['taskid'] ] = task
@@ -79,7 +100,7 @@ class Notebook(object):
                 self._tasks[ task['parent'] ]['kids'].append( task['taskid'] )
 
     def add( self, name, description="" ):
-        return self._database.insert( name=name, description=description )
+        return self._database.tasks.insert( name=name, description=description )
 
     def _list( self, task, indent=0 ):
         print "%4i : %s%s" % ( task['taskid'], '  '*indent, task['name'])
@@ -101,11 +122,11 @@ class Notebook(object):
         self.refresh()
         ids = [ taskid ]
         ids.extend( self._kids( taskid ) )
-        return self._database.delete( ids )
+        return self._database.tasks.delete( ids )
 
     def move( self, taskid, parent ):
         self.refresh()
-        return self._database.set_parent( taskid, parent )
+        return self._database.tasks.set_parent( taskid, parent )
 
     def select( self, parentid=None ):
         return [ task for task in self._tasks.itervalues() if task['parent'] == parentid ]
