@@ -35,6 +35,10 @@ class TaskModel(object):
     def Move(self, source, dest):
         self._taskbook.move( source, dest )
 
+    def Edit(self, indices, text):
+        taskid = self.GetItemId( indices )
+        self._taskbook.update( taskid, text )
+
 #--------------------------------------------------------------
 class TaskTree(treemixin.VirtualTree, treemixin.DragAndDrop,
             treemixin.ExpansionState, wx.TreeCtrl):
@@ -45,6 +49,9 @@ class TaskTree(treemixin.VirtualTree, treemixin.DragAndDrop,
         self.model = TaskModel( self.taskbook )
         self.RefreshItems()
         self.CreateImageList()
+
+        self.Bind( wx.EVT_TREE_END_LABEL_EDIT, self.OnEndEdit, self )
+        self.Bind( wx.EVT_RIGHT_UP, self.OnRightUp )
 
     def CreateImageList(self):
         size=(16,16)
@@ -79,6 +86,21 @@ class TaskTree(treemixin.VirtualTree, treemixin.DragAndDrop,
         targetId = self.model.GetItemId( self.GetIndexOfItem( target ) )
         self.model.Move( itemId, targetId )
         self.GetParent().RefreshItems()
+
+    def OnEndEdit(self, event):
+        self.OnEdit( event.GetItem(), event.GetLabel() )
+        self.GetParent().RefreshItems()
+        event.Veto()
+
+    def OnRightUp(self, event):
+        pt = event.GetPosition()
+        item, flags = self.HitTest( pt )
+        if item:
+            self.EditLabel( item )
+
+    def OnEdit(self, item, text ):
+        indices = self.GetIndexOfItem( item )
+        self.model.Edit( indices, text )
 
 #--------------------------------------------------------------
 class TaskOverviewPanel(wx.Panel):
