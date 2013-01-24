@@ -170,7 +170,8 @@ class MyFrame2(wx.Frame):
 if __name__ == "__main__":
     app = wx.PySimpleApp(0)
     wx.InitAllImageHandlers()
-    taskbook = task.Notebook()
+    database = task.Database()
+    taskbook = task.Taskbook( database )
     taskbook.refresh()
     frame = MyFrame2(None,-1,"",taskbook=taskbook)
     app.SetTopWindow(frame)

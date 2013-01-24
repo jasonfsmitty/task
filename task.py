@@ -135,9 +135,9 @@ class Database(object):
         return self._tasks
 
 #--------------------------------------------------------------------------
-class Notebook(object):
-    def __init__( self ):
-        self._database = Database()
+class Taskbook(object):
+    def __init__( self, database ):
+        self._database = database
         self._tasks = dict() # { taskid: task }
 
     def refresh( self ):
@@ -188,9 +188,19 @@ class Notebook(object):
         return [ task for task in self._tasks.itervalues() if task['parent'] == parentid ]
 
 #--------------------------------------------------------------------------
+class Notebook(object):
+    def __init__( self ):
+        self._database = Database()
+        self._tasks = Taskbook( self._database )
+
+    @property
+    def tasks( self ):
+        return self._tasks
+
+#--------------------------------------------------------------------------
 def do_list( book, args ):
     book = Notebook()
-    book.list()
+    book.tasks.list()
     return 0
 
 #--------------------------------------------------------------------------
@@ -200,16 +210,16 @@ def do_add( book, args ):
         usage( "Missing task name!" )
         return 1
 
-    if not book.add( name=name ):
+    if not book.tasks.add( name=name ):
         return 1
-    book.list()
+    book.tasks.list()
     return 0
 
 #--------------------------------------------------------------------------
 def do_delete( book, args ):
     for x in args:
-        book.delete( int(x) )
-    book.list()
+        book.tasks.delete( int(x) )
+    book.tasks.list()
     return 0
 
 #--------------------------------------------------------------------------
@@ -220,9 +230,9 @@ def do_move( book, args ):
 
     dest = int( args[-1] )
     for source in args[:-1]:
-        if not book.move( int(source), dest ):
+        if not book.tasks.move( int(source), dest ):
             return 1
-    book.list()
+    book.tasks.list()
     return 0
 
 #--------------------------------------------------------------------------
@@ -231,10 +241,10 @@ def do_edit( book, args ):
         usage( "Missing edit arguments" )
         return 1
 
-    if not book.update( int(args[0]), ' '.join( args[1:] ) ):
+    if not book.tasks.update( int(args[0]), ' '.join( args[1:] ) ):
         return 1
 
-    book.list()
+    book.tasks.list()
     return 0    
 #--------------------------------------------------------------------------
 COMMANDS = {
