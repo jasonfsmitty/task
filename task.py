@@ -70,16 +70,59 @@ class TaskTable(object):
             return False
 
 #--------------------------------------------------------------------------
+class MessageTable(object):
+    def __init__( self, db ):
+        self._database = db
+
+    def create( self ):
+        columns = [
+            'msgid INTEGER PRIMARY KEY AUTOINCREMENT',
+            'date DATE',
+            'ts TIMESTAMP',
+            'text TEXT'
+        ]
+        try:
+            with self._database.connection() as conn:
+                conn.execute( "CREATE TABLE IF NOT EXISTS Messages ( %s )" % (','.join(columns) ) )
+        except sqlite3.Error as e:
+            logging.error( "Failed to initialize Message table: %s", str( e.args[0] ) )
+
+    def select( self, columns=[ 'date', 'ts', 'text' ] ):
+        try:
+            cursor = self._database.cursor()
+            cursor.execute( "SELECT %s FROM Messages" % (','.join(columns)) )
+            return [ dict( zip( columns, row ) ) for row in cursor ]
+        except sqlite3.Error as e:
+            logging.error( "Error getting messages: colunns=%s error=%s", str(columns), str(e.args[0]) )
+            return None
+
+    def insert( self, text ):
+        try:
+            today = datetime.date.today()
+            now = datetime.datetime.now()
+            with self._database.connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute( "INSERT INTO Messages ( date, ts, text ) VALUES ( ?, ?, ? )", ( today, now, text ) )
+            return cursor.lastrowid
+        except sqlite3.Error as e:
+            logging.error( "Failed to insert new message: %s", str( e.args[0] ) )
+            return None
+
+
+#--------------------------------------------------------------------------
 class Database(object):
     def __init__( self, filename="/home/jasmith/.taskbook.db" ):
         self._filename = filename
         self._connection = sqlite3.connect( self._filename )
 
         self._tasks = TaskTable( self )
+        self._messages = MessageTable( self )
+
         self.init()
 
     def init( self ):
         self._tasks.create()
+        self._messages.create()
 
     def connection( self ):
         return self._connection
