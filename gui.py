@@ -70,12 +70,6 @@ class TaskTree(treemixin.VirtualTree, treemixin.DragAndDrop,
             self.imageList.Add( wx.ArtProvider.GetBitmap( art, wx.ART_OTHER, size ) )
         self.AssignImageList( self.imageList )
 
-    def OnGetItemFont(self, indices):
-        if self.model.GetChildrenCount(indices) > 0:
-            return wx.SMALL_FONT
-        else:
-            return super(TaskTree,self).OnGetItemFont(indices)
-
     def OnGetItemImage(self, indices, which):
         if which in [wx.TreeItemIcon_Normal, wx.TreeItemIcon_Selected]:
             if self.model.GetChildrenCount(indices) > 0:
