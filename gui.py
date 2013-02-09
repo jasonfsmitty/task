@@ -39,6 +39,10 @@ class TaskModel(object):
         taskid = self.GetItemId( indices )
         self._taskbook.update( taskid, text )
 
+    def Delete(self, indices):
+        taskid = self.GetItemId( indices )
+        self._taskbook.delete( taskid )
+
 #--------------------------------------------------------------
 class TaskTree(treemixin.VirtualTree, treemixin.DragAndDrop,
             treemixin.ExpansionState, wx.TreeCtrl):
@@ -50,8 +54,14 @@ class TaskTree(treemixin.VirtualTree, treemixin.DragAndDrop,
         self.RefreshItems()
         self.CreateImageList()
 
+        self.MenuEditId = wx.NewId()
+        self.Bind( wx.EVT_MENU, self.OnMenuEdit, id=self.MenuEditId )
+
+        self.MenuDeleteId = wx.NewId()
+        self.Bind( wx.EVT_MENU, self.OnMenuDelete, id=self.MenuDeleteId )
+
         self.Bind( wx.EVT_TREE_END_LABEL_EDIT, self.OnEndEdit, self )
-        self.Bind( wx.EVT_RIGHT_UP, self.OnRightUp )
+        self.Bind( wx.EVT_TREE_ITEM_MENU, self.OnContextMenu )
 
     def CreateImageList(self):
         size=(16,16)
@@ -99,8 +109,40 @@ class TaskTree(treemixin.VirtualTree, treemixin.DragAndDrop,
             self.EditLabel( item )
 
     def OnEdit(self, item, text ):
-        indices = self.GetIndexOfItem( item )
-        self.model.Edit( indices, text )
+        if text and len(text) > 0:
+            indices = self.GetIndexOfItem( item )
+            self.model.Edit( indices, text )
+
+    def OnContextMenu( self, event ):
+        item = event.GetItem()
+        if item:
+            if True:
+                menu = wx.Menu()
+                menu.Append( self.MenuEditId, "Edit" )
+                menu.Append( self.MenuDeleteId, "Delete" )
+                self.PopupMenu( menu )
+                menu.Destroy()
+            else:
+                self.EditLabel( item )
+        event.Skip()
+
+    def OnMenuEdit( self, event ):
+        item = self.GetSelection()
+        self.EditLabel( item )
+
+    def OnMenuDelete( self, event ):
+        parent = self
+        question = "Really delete?"
+        caption = "Confirmation"
+        dialog = wx.MessageDialog( parent, question, caption, wx.YES_NO | wx.ICON_QUESTION )
+        confirmed = ( dialog.ShowModal() == wx.ID_YES )
+        dialog.Destroy()
+
+        if confirmed:
+            item = self.GetSelection()
+            indices = self.GetIndexOfItem( item )
+            self.model.Delete( indices )
+            self.GetParent().RefreshItems()
 
 #--------------------------------------------------------------
 class TaskOverviewPanel(wx.Panel):
@@ -133,8 +175,7 @@ class TaskOverviewPanel(wx.Panel):
     def RefreshItems(self):
         self.taskbook.refresh()
         self.taskTree.RefreshItems()
-        self.taskTree.UnselectAll()
-
+        self.taskTree.UnselectAll() 
 #--------------------------------------------------------------
 class MessagePanel(wx.Panel):
     def __init__(self, *args, **kwds):
