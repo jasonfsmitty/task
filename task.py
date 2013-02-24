@@ -1,7 +1,18 @@
 #!/usr/bin/env python
 
-import sys, os.path, logging, sqlite3
+import sys
+import os.path
+import logging
+import sqlite3
 
+#--------------------------------------------------------------------------
+def GetConfigDir():
+    cfgDir = os.path.join( os.environ['LOCALAPPDATA'], 'jfs-tasks' )
+    if not os.path.exists( cfgDir ):
+        os.makedirs( cfgDir )
+    return cfgDir
+
+#--------------------------------------------------------------------------
 def _dump_table( db, out, table ):
     try:
         out.write( "%s Table:\n" % (table) )
@@ -153,7 +164,7 @@ class MessageTable(object):
 
 #--------------------------------------------------------------------------
 class Database(object):
-    def __init__( self, filename="/home/jasmith/.taskbook.db" ):
+    def __init__( self, filename=os.path.join( GetConfigDir(), 'tasks.db' ) ):
         self._filename = filename
         self._connection = sqlite3.connect( self._filename )
 

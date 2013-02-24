@@ -274,15 +274,8 @@ class MyFrame2(wx.Frame):
         self.Layout()
 
 #--------------------------------------------------------------
-def GetDataDir():
-    return wx.StandardPaths.Get().GetUserDataDir()
-
-#--------------------------------------------------------------
 def GetConfig():
-    dataDir = GetDataDir()
-    if not os.path.exists( dataDir ):
-        os.makedirs( dataDir )
-    return wx.FileConfig( localFilename = os.path.join( dataDir, "options" ) )
+    return wx.FileConfig( localFilename = os.path.join( task.GetConfigDir(), "options" ) )
 
 #--------------------------------------------------------------
 if __name__ == "__main__":
