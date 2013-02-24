@@ -2,38 +2,77 @@
 
 import sys, os.path, logging, sqlite3
 
+def _dump_table( db, out, table ):
+    try:
+        out.write( "%s Table:\n" % (table) )
+        cursor = db.cursor()
+        cursor.execute( "SELECT * FROM %s" % (table) )
+        for row in cursor:
+            out.write( "\t%s\n" % str(row) )
+        out.write( "\n" )
+    except sqlite3.Error as e:
+        logging.error( "Error dumping table %s: error=%s", table, str(e.args[0]) )
+
 #--------------------------------------------------------------------------
 class TaskTable(object):
     def __init__( self, db ):
         self._database = db
 
-    def create( self ):
+    def create_status_table( self ):
         columns = [
-            "taskid INTEGER PRIMARY KEY AUTOINCREMENT",
+            "statusid INTEGER PRIMARY KEY",
             "name TEXT",
-            "description TEXT",
-            "parent INTEGER"
+            "short TEXT"
+        ]
+        values =  [
+            ( 1, 'Open',      'O' ),
+            ( 2, 'Closed',    'C' ),
+            ( 3, 'Withdrawn', 'W' )
         ]
         try:
             with self._database.connection() as conn:
-                conn.execute( "CREATE TABLE IF NOT EXISTS Tasks ( %s )" % (','.join(columns)) )
+                conn.execute( "CREATE TABLE IF NOT EXISTS Status ( %s )" % (','.join(columns)) )
+                conn.executemany( "INSERT or IGNORE INTO Status ( statusid, name, short ) VALUES (?,?,?)", values )
+        except sqlite3.Error as e:
+            logging.error( "Failed to initialize Status table: %s", str( e.args[0] ) )
+
+    def create_task_table( self ):
+        columns = [
+            "taskid INTEGER PRIMARY KEY AUTOINCREMENT",
+            "name TEXT",
+            "details TEXT",
+            "parent INTEGER",
+            "statusid INTEGER",
+            "FOREIGN KEY(statusid) REFERENCES Status(statusid)"
+        ]
+        try:
+            with self._database.connection() as conn:
+                conn.execute( "CREATE TABLE IF NOT EXISTS Task ( %s )" % (','.join(columns)) )
         except sqlite3.Error as e:
             logging.error( "Failed to initialize Task table: %s", str( e.args[0] ) )
 
-    def select( self, columns=["taskid","name","description","parent"] ):
+    def create( self ):
+        self.create_status_table()
+        self.create_task_table()
+
+    def debug( self, out ):
+        _dump_table( self._database, out, "Task" )
+        _dump_table( self._database, out, "Status" )
+
+    def select( self, columns=["taskid","name","details","parent","statusid"] ):
         try:
             cursor = self._database.cursor()
-            cursor.execute( "SELECT %s FROM Tasks" % (','.join( columns )) )
+            cursor.execute( "SELECT %s FROM Task" % (','.join( columns )) )
             return [ dict( zip( columns, row ) ) for row in cursor ]
         except sqlite3.Error as e:
             logging.error( "Error getting tasks: columns=%s error=%s", str(columns), str(e.args[0]) )
             return None
 
-    def insert( self, name, description="" ):
+    def insert( self, name, details="", status='O' ):
         try:
             with self._database.connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute( "INSERT INTO Tasks ( name, description ) VALUES ( ?, ? )", ( name, description ) )
+                cursor.execute( "INSERT INTO Task ( name, details ) VALUES ( ?, ? )", ( name, details ) )
             return cursor.lastrowid
         except sqlite3.Error as e:
             logging.error( "Failed to insert new task: %s", str( e.args[0] ) )
@@ -43,7 +82,7 @@ class TaskTable(object):
         try:
             with self._database.connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute( "UPDATE Tasks SET name=? WHERE taskid=?", (name, taskid) )
+                cursor.execute( "UPDATE Task SET name=? WHERE taskid=?", (name, taskid) )
             return True
         except sqlite3.Error as e:
             logging.error( "Failed to update task: %s", str( e.args[0] ) )
@@ -53,7 +92,7 @@ class TaskTable(object):
         try:
             with self._database.connection() as conn:
                 cursor = conn.cursor()
-                cursor.executemany( "DELETE FROM Tasks WHERE taskid=?", [ (id,) for id in ids ] )
+                cursor.executemany( "DELETE FROM Task WHERE taskid=?", [ (id,) for id in ids ] )
             return True
         except sqlite3.Error as e:
             logging.error( "Failed to delete tasks: ids=%s error=%s", str(ids), str(e.args[0]) )
@@ -63,7 +102,7 @@ class TaskTable(object):
         try:
             with self._database.connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute( "UPDATE Tasks SET parent=? WHERE taskid=?", (parent, taskid) )
+                cursor.execute( "UPDATE Task SET parent=? WHERE taskid=?", (parent, taskid) )
             return True
         except sqlite3.Error as e:
             logging.error( "Failed to set task[%u] as parent to task[%u]", parent, taskid )
@@ -83,14 +122,17 @@ class MessageTable(object):
         ]
         try:
             with self._database.connection() as conn:
-                conn.execute( "CREATE TABLE IF NOT EXISTS Messages ( %s )" % (','.join(columns) ) )
+                conn.execute( "CREATE TABLE IF NOT EXISTS Message ( %s )" % (','.join(columns) ) )
         except sqlite3.Error as e:
             logging.error( "Failed to initialize Message table: %s", str( e.args[0] ) )
+
+    def debug( self, out ):
+        _dump_table( self._database, out, "Message" )
 
     def select( self, columns=[ 'date', 'ts', 'text' ] ):
         try:
             cursor = self._database.cursor()
-            cursor.execute( "SELECT %s FROM Messages" % (','.join(columns)) )
+            cursor.execute( "SELECT %s FROM Message" % (','.join(columns)) )
             return [ dict( zip( columns, row ) ) for row in cursor ]
         except sqlite3.Error as e:
             logging.error( "Error getting messages: colunns=%s error=%s", str(columns), str(e.args[0]) )
@@ -102,7 +144,7 @@ class MessageTable(object):
             now = datetime.datetime.now()
             with self._database.connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute( "INSERT INTO Messages ( date, ts, text ) VALUES ( ?, ?, ? )", ( today, now, text ) )
+                cursor.execute( "INSERT INTO Message ( date, ts, text ) VALUES ( ?, ?, ? )", ( today, now, text ) )
             return cursor.lastrowid
         except sqlite3.Error as e:
             logging.error( "Failed to insert new message: %s", str( e.args[0] ) )
@@ -119,6 +161,11 @@ class Database(object):
         self._messages = MessageTable( self )
 
         self.init()
+
+    def debug( self, out ):
+        out.write( "DB filename=%s\n\n" % self._filename )
+        self._tasks.debug( out )
+        self._messages.debug( out )
 
     def init( self ):
         self._tasks.create()
@@ -140,6 +187,11 @@ class Taskbook(object):
         self._database = database
         self._tasks = dict() # { taskid: task }
 
+    def debug( self, out ):
+        out.write( "In memory tasks:\n" )
+        out.write( "\t%s\n\n" % str(self._tasks) )
+        self._database.debug( out )
+
     def refresh( self ):
         self._tasks = dict()
 
@@ -152,8 +204,8 @@ class Taskbook(object):
             if task['parent']:
                 self._tasks[ task['parent'] ]['kids'].append( task['taskid'] )
 
-    def add( self, name, description="" ):
-        return self._database.tasks.insert( name=name, description=description )
+    def add( self, name, details="" ):
+        return self._database.tasks.insert( name=name, details=details )
 
     def _list( self, task, indent=0 ):
         print "%4i : %s%s" % ( task['taskid'], '  '*indent, task['name'])
@@ -192,6 +244,9 @@ class Notebook(object):
     def __init__( self ):
         self._database = Database()
         self._tasks = Taskbook( self._database )
+
+    def debug( self, out ):
+        self._tasks.debug( out )
 
     @property
     def tasks( self ):
@@ -245,7 +300,13 @@ def do_edit( book, args ):
         return 1
 
     book.tasks.list()
-    return 0    
+    return 0
+
+#--------------------------------------------------------------------------
+def do_debug( book, args ):
+    book.debug( sys.stdout )
+    return 0
+
 #--------------------------------------------------------------------------
 COMMANDS = {
     'list'    : do_list,
@@ -254,7 +315,8 @@ COMMANDS = {
     'delete'  : do_delete,
     'move'    : do_move,
     'mv'      : do_move,
-    'edit'    : do_edit
+    'edit'    : do_edit,
+    'debug'   : do_debug
 }
 
 #--------------------------------------------------------------------------
