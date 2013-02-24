@@ -3,6 +3,7 @@
 
 import task
 import wx
+import os
 
 try:
     import treemixin
@@ -154,7 +155,19 @@ class TaskOverviewPanel(wx.Panel):
         sizer.Add(self.taskTree, 1, wx.EXPAND, 0)
         self.SetSizer(sizer)
 
+        self.ReadConfig()
         self.newTaskText.SetFocus()
+
+    def ReadConfig(self):
+        config = GetConfig()
+        val = config.Read( 'ExpansionState' )
+        if val:
+            self.taskTree.SetExpansionState( eval(val) )
+
+    def SaveConfig(self):
+        config = GetConfig()
+        config.Write( 'ExpansionState', str(self.taskTree.GetExpansionState()) )
+        config.Flush()
 
     def OnFocus(self, event):
         self.newTaskText.SetFocus()
@@ -170,11 +183,57 @@ class TaskOverviewPanel(wx.Panel):
         self.taskbook.refresh()
         self.taskTree.RefreshItems()
         self.taskTree.UnselectAll() 
+
 #--------------------------------------------------------------
 class MessagePanel(wx.Panel):
     def __init__(self, *args, **kwds):
         wx.Panel.__init__( self, *args, **kwds )
         # TODO
+
+#--------------------------------------------------------------
+class MyTaskBarIcon(wx.TaskBarIcon):
+    TASKBAR_RESTORE = wx.NewId()
+    TASKBAR_CLOSE   = wx.NewId()
+    TASKBAR_CHANGE  = wx.NewId()
+    TASKBAR_REMOVE  = wx.NewId()
+
+    def __init__(self, frame):
+        wx.TaskBarIcon.__init__(self)
+        self.frame = frame
+
+        # TODO: create an icon
+
+        self.Bind( wx.EVT_TASKBAR_LEFT_DCLICK, self.OnTaskBarActivate)
+        self.Bind( wx.EVT_MENU, self.OnTaskBarActivate, id=self.TASKBAR_RESTORE )
+        self.Bind( wx.EVT_MENU, self.OnTaskBarClose,    id=self.TASKBAR_CLOSE )
+        self.Bind( wx.EVT_MENU, self.OnTaskBarChange,   id=self.TASKBAR_CHANGE )
+        self.Bind( wx.EVT_MENU, self.OnTaskBarRemove,   id=self.TASKBAR_REMOVE )
+
+    def CreatePopupMenu(self):
+        menu = wx.Menu()
+        menu.Append( self.TASKBAR_RESTORE, "Restore" )
+        menu.Append( self.TASKBAR_CLOSE,   "Close" )
+        menu.AppendSeparator()
+        menu.Append( self.TASKBAR_CHANGE, "Change the taskbar icon" )
+        menu.Append( self.TASKBAR_REMOVE, "Remove the taskbar icon" )
+        return menu
+
+    def OnTaskBarActivate( self, event ):
+        if self.frame.IsIconized():
+            self.frame.Iconize(False)
+        if not self.frame.IsShown():
+            self.frame.Show(True)
+        self.frame.Raise()
+
+    def OnTaskBarClose( self, event ):
+        wx.CallAfter( self.frame.Close )
+
+    def OnTaskBarChange( self, event ):
+        pass
+
+    def OnTaskBarRemove( self, event ):
+        self.RemoveIcon()
+
 
 #--------------------------------------------------------------
 class MyFrame2(wx.Frame):
@@ -190,6 +249,20 @@ class MyFrame2(wx.Frame):
         self.SetTitle("Tasks")
         self.__do_layout()
 
+        try:
+            self.taskbar = MyTaskBarIcon( self )
+        except:
+            self.taskbar = None
+
+        self.Bind( wx.EVT_CLOSE, self.OnCloseWindow )
+
+    def OnCloseWindow(self, event):
+        print "OnCloseWindow"
+        self.notebook_pane_1.SaveConfig()
+        if self.taskbar:
+            self.taskbar.Destroy()
+        self.Destroy()
+
     def __do_layout(self):
         self.notebook.AddPage(self.notebook_pane_1, "Tasks")
         self.notebook.AddPage(self.notebook_pane_2, "Log")
@@ -200,10 +273,21 @@ class MyFrame2(wx.Frame):
         sizer_1.Fit(self)
         self.Layout()
 
+#--------------------------------------------------------------
+def GetDataDir():
+    return wx.StandardPaths.Get().GetUserDataDir()
+
+#--------------------------------------------------------------
+def GetConfig():
+    dataDir = GetDataDir()
+    if not os.path.exists( dataDir ):
+        os.makedirs( dataDir )
+    return wx.FileConfig( localFilename = os.path.join( dataDir, "options" ) )
 
 #--------------------------------------------------------------
 if __name__ == "__main__":
     app = wx.PySimpleApp(0)
+    app.SetAppName( "jfs-tasks" )
     wx.InitAllImageHandlers()
     database = task.Database()
     taskbook = task.Taskbook( database )
